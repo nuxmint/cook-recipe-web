@@ -1,3 +1,133 @@
 {
- "recipes": []
+ "recipes": [
+  {
+   "id": 1,
+   "menu_name": "마녀스프 (토마토 스튜)",
+   "channel": "허니콩 Honey kong",
+   "source_url": "https://youtu.be/t7uHcJBjAvE",
+   "memo": "- 도구: 냄비(팬), 칼, 도마, 실리콘 주걱, 밀폐 용기 등\n- 보관법: 한 번에 많이 만들어서 밀폐 용기에 소분해 두고 보관하여 섭취합니다.",
+   "steps": [
+    "감자, 당근, 아스파라거스, 양파, 새송이버섯, 토마토, 양배추를 먹기 좋은 크기로 썰고 소고기를 준비합니다.",
+    "예열한 팬에 올리브유를 두르고 감자, 당근, 아스파라거스를 넣고 볶다가 뚜껑을 덮고 약불로 10분간 익힙니다.",
+    "소고기, 양파, 새송이버섯, 토마토를 넣고 뚜껑을 덮어 10분간 익힙니다.",
+    "양배추를 넣고 또 10분간 뚜껑을 덮어 익힙니다.",
+    "- 뚜껑을 닫아서 익히면 채수가 많이 나옵니다.",
+    "골고루 섞어준 뒤 카레 가루 2 T, 토마토 퓨레 720 ml, 물 720 ml를 넣습니다.",
+    "케찹 3바퀴를 넣고 골고루 섞은 후 중불로 끓입니다.",
+    "끓어오르면 버터 2조각, 소금 2 pinches, 후추 2 pinches를 넣고 20분간 끓입니다.",
+    "- 중간에 한 번씩 바닥까지 긁으면서 섞어주어야 바닥이 타지 않습니다.",
+    "완성된 마녀스프를 밀폐 용기에 소분해 두고 먹습니다."
+   ],
+   "updated_at": "2026-11-06T20:18:24",
+   "portions": [
+    {
+     "serving": 1,
+     "label": null,
+     "ingredients": [
+      {
+       "name": "감자",
+       "amount": null,
+       "aux": "2 pcs",
+       "note": "먹기 좋은 크기로 썰기"
+      },
+      {
+       "name": "당근",
+       "amount": null,
+       "aux": "2 pcs",
+       "note": "먹기 좋은 크기로 썰기"
+      },
+      {
+       "name": "아스파라거스",
+       "amount": "300 g",
+       "aux": null,
+       "note": "먹기 좋은 크기로 썰기"
+      },
+      {
+       "name": "양파",
+       "amount": null,
+       "aux": "2 pcs",
+       "note": "먹기 좋은 크기로 썰기"
+      },
+      {
+       "name": "새송이버섯",
+       "amount": null,
+       "aux": "3 pcs",
+       "note": "먹기 좋은 크기로 썰기"
+      },
+      {
+       "name": "토마토",
+       "amount": null,
+       "aux": "4 pcs",
+       "note": "먹기 좋은 크기로 썰기"
+      },
+      {
+       "name": "양배추",
+       "amount": null,
+       "aux": "1/2 통",
+       "note": "먹기 좋은 크기로 썰어서 세척"
+      },
+      {
+       "name": "소고기",
+       "amount": "600 g",
+       "aux": null,
+       "note": "어떤 부위도 가능하며 살치살 사용"
+      },
+      {
+       "name": "올리브유",
+       "amount": null,
+       "aux": null,
+       "note": "팬 예열 후 두르기"
+      },
+      {
+       "name": "카레 가루",
+       "amount": null,
+       "aux": "2 Tbs",
+       "note": null
+      },
+      {
+       "name": "토마토 퓨레",
+       "amount": "720 ml",
+       "aux": null,
+       "note": null
+      },
+      {
+       "name": "물",
+       "amount": "720 ml",
+       "aux": null,
+       "note": null
+      },
+      {
+       "name": "케찹",
+       "amount": null,
+       "aux": "3 바퀴",
+       "note": null
+      },
+      {
+       "name": "버터",
+       "amount": null,
+       "aux": "2 조각",
+       "note": null
+      },
+      {
+       "name": "소금",
+       "amount": null,
+       "aux": "2 pinches",
+       "note": null
+      },
+      {
+       "name": "후추",
+       "amount": null,
+       "aux": "2 pinches",
+       "note": null
+      }
+     ]
+    }
+   ],
+   "photo": "photos/recipe-1.jpg",
+   "servings": [
+    1
+   ],
+   "loose_count": 0
+  }
+ ]
 }
