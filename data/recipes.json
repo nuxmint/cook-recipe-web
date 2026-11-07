@@ -1,6 +1,120 @@
 {
  "recipes": [
   {
+   "id": 4,
+   "menu_name": "치킨마요컵밥",
+   "channel": "만개의레시피 10K Recipe",
+   "source_url": "https://youtu.be/UuSDBqNh6aE",
+   "memo": "- 간장: 음성 자막에서는 3T로 언급되었으나 화면 00:31 표기에 2T로 적혀 있어 화면 표기 2T를 따름\n- 도구: 볼, 팬, 젓가락",
+   "steps": [
+    "닭가슴살 120 g을 볼에 담고 청주 1 Tbs, 소금 약간, 후추 약간을 넣어 섞은 뒤 잠시 재운다.",
+    "팬에 달걀 2 pcs를 깨 넣고 소금 약간을 뿌린 뒤 저어가며 스크램블 에그를 만들어 준비한다.",
+    "팬에 채 썬 양파 1/2 통과 재워둔 닭가슴살을 넣고 함께 볶는다.",
+    "다진 마늘 1/2 Tbs, 간장 2 Tbs, 맛술 1 Tbs, 올리고당 1 Tbs를 넣고 함께 졸인다.",
+    "그릇에 밥 1 공기를 담는다.",
+    "달걀 스크램블을 밥 위에 두른다.",
+    "볶은 닭가슴살과 양파를 그릇 가운데에 올린다.",
+    "마요네즈 1 Tbs를 지그재그 모양으로 뿌린다.",
+    "쪽파 2 Tbs를 위에 뿌려 마무리한다."
+   ],
+   "updated_at": "2026-11-06T23:20:27",
+   "portions": [
+    {
+     "serving": null,
+     "label": null,
+     "ingredients": [
+      {
+       "name": "닭가슴살",
+       "amount": "120 g",
+       "aux": "1 pc",
+       "note": "깍둑썰기, 밑간용"
+      },
+      {
+       "name": "청주",
+       "amount": null,
+       "aux": "1 Tbs",
+       "note": "닭가슴살 밑간용"
+      },
+      {
+       "name": "소금",
+       "amount": null,
+       "aux": "약간",
+       "note": "닭가슴살 밑간용"
+      },
+      {
+       "name": "후추",
+       "amount": null,
+       "aux": "약간",
+       "note": "닭가슴살 밑간용"
+      },
+      {
+       "name": "달걀",
+       "amount": null,
+       "aux": "2 pcs",
+       "note": "스크램블용"
+      },
+      {
+       "name": "소금",
+       "amount": null,
+       "aux": "약간",
+       "note": "달걀 간용"
+      },
+      {
+       "name": "양파",
+       "amount": null,
+       "aux": "1/2 통",
+       "note": "채 썬 형태"
+      },
+      {
+       "name": "마늘",
+       "amount": null,
+       "aux": "1/2 Tbs",
+       "note": "다진 마늘"
+      },
+      {
+       "name": "간장",
+       "amount": null,
+       "aux": "2 Tbs",
+       "note": "소스용"
+      },
+      {
+       "name": "맛술",
+       "amount": null,
+       "aux": "1 Tbs",
+       "note": "소스용"
+      },
+      {
+       "name": "올리고당",
+       "amount": null,
+       "aux": "1 Tbs",
+       "note": "소스용"
+      },
+      {
+       "name": "밥",
+       "amount": null,
+       "aux": "1 공기",
+       "note": "그릇 담기용"
+      },
+      {
+       "name": "마요네즈",
+       "amount": null,
+       "aux": "1 Tbs",
+       "note": "토핑용"
+      },
+      {
+       "name": "쪽파",
+       "amount": null,
+       "aux": "2 Tbs",
+       "note": "고명용"
+      }
+     ]
+    }
+   ],
+   "photo": "photos/recipe-4.jpg",
+   "servings": [],
+   "loose_count": 1
+  },
+  {
    "id": 1,
    "menu_name": "마녀스프 (토마토 스튜)",
    "channel": "허니콩 Honey kong",
