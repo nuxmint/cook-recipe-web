@@ -1,7 +1,7 @@
 // Built by publish.py. VERSION is a hash of the site files, so each release replaces the cached shell.
 // Several sites share this address and its caches, so every name here carries this site's prefix.
 const PREFIX = 'cook-recipe-';
-const VERSION = `${PREFIX}57f8595f953c`;
+const VERSION = `${PREFIX}b1247b229c8a`;
 const DATA_CACHE = `${PREFIX}data`;
 const SHELL = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "fonts/Pretendard-Bold.woff2"];
 

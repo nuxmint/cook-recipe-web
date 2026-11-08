@@ -11,8 +11,12 @@ const OTHER_UNITS = ["통", "바퀴", "조각", "spoon", "bunch", "sheet", "bloc
 const RECENT_COUNT = 8;
 const app = document.getElementById("app");
 const sidebar = document.getElementById("sidebar");
+// The dashboard shows dishes or prep items. A prep item has batch tables instead of serving tabs.
+const KIND_NAMES = { menu: "메뉴", prep: "프렙" };
+const INFO_FIELDS = [["yield_text", "완성량"], ["storage_method", "보관 방법"], ["storage_period", "보관 기간"]];
 const state = {
-  guide: "", recipe: null, recipes: [], filter: "all", query: "", highlightId: null,
+  guides: { menu: "", prep: "" }, categories: [], recipe: null, recipes: [],
+  kind: "menu", filter: "all", category: "all", query: "", highlightId: null,
   tab: 1, dirty: false, saveFailed: false, timer: null, queue: Promise.resolve(),
 };
 
@@ -46,6 +50,15 @@ const POT_ART = `<svg viewBox="0 0 200 130" aria-hidden="true">
   <path d="M46 50h108v12H46z" fill="#a03220"/>
   <rect x="40" y="44" width="120" height="10" rx="5" fill="#fffdf8"/>
   <circle cx="72" cy="42" r="9" fill="#c23f26"/><circle cx="102" cy="40" r="7" fill="#e9b949"/><circle cx="128" cy="42" r="8" fill="#6d8a48"/></svg>`;
+const JAR_ART = `<svg viewBox="0 0 200 130" aria-hidden="true">
+  <ellipse cx="100" cy="122" rx="56" ry="5.5" fill="#26291f" fill-opacity=".14"/>
+  <rect x="72" y="9" width="56" height="18" rx="5" fill="#2f3a24"/>
+  <rect x="76" y="27" width="48" height="7" rx="3" fill="#fffdf8" fill-opacity=".85"/>
+  <path d="M66 34h68v72a16 16 0 0 1-16 16H82a16 16 0 0 1-16-16z" fill="#fffdf8"/>
+  <path d="M66 64h68v42a16 16 0 0 1-16 16H82a16 16 0 0 1-16-16z" fill="#c23f26"/>
+  <path d="M66 64c12 6 22-4 34 2s22 2 34-2v8H66z" fill="#a03220"/>
+  <rect x="80" y="76" width="40" height="24" rx="4" fill="#e9b949"/>
+  <path d="M92 92c4-8 12-10 16-10-1 6-6 11-16 10z" fill="#2f3a24"/></svg>`;
 
 function fromMarkup(markup) {
   const template = document.createElement("template");
@@ -144,8 +157,9 @@ async function fetchPublished() {
 }
 
 async function readSetup() {
-  if (PUBLISHED) return { guide: "" };
-  return { guide: (await api("/api/guide")).text };
+  if (PUBLISHED) return { guides: { menu: "", prep: "" }, categories: (await fetchPublished()).categories || [] };
+  const [guide, categories] = await Promise.all([api("/api/guide"), api("/api/categories")]);
+  return { guides: { menu: guide.text, prep: guide.prep }, categories };
 }
 
 async function readRecipes() {
@@ -165,8 +179,13 @@ async function loadRecipes() {
   state.recipes = await readRecipes();
 }
 
+function isPrep(recipe) {
+  return recipe.kind === "prep";
+}
+
+// A prep item has no serving to settle, but it waits for review until it has a category.
 function needsAttention(recipe) {
-  return recipe.blank_count > 0 || recipe.loose_count > 0 || recipe.portion_count === 0;
+  return recipe.blank_count > 0 || recipe.loose_count > 0 || recipe.portion_count === 0 || (isPrep(recipe) && !recipe.category);
 }
 
 function renderSidebar(activeId) {
@@ -180,8 +199,8 @@ function renderSidebar(activeId) {
     h("div", { class: "side-list" }, recent.length
       ? recent.map((recipe) => h("a", {
         class: `side-link ${recipe.id === activeId ? "active" : ""}`, href: `#/recipe/${recipe.id}`,
-      }, h("span", { class: `side-dot ${!PUBLISHED && needsAttention(recipe) ? "warn" : ""}` }),
-      h("span", { class: "side-name" }, recipe.menu_name || "메뉴명 미확인")))
+      }, h("span", { class: `side-dot ${isPrep(recipe) ? "prep" : ""} ${!PUBLISHED && needsAttention(recipe) ? "warn" : ""}` }),
+      h("span", { class: "side-name" }, recipe.menu_name || (isPrep(recipe) ? "프렙명 미확인" : "메뉴명 미확인"))))
       : h("p", { class: "side-empty" }, "아직 없습니다")),
     PUBLISHED ? null : h("button", { class: "publish-button", onclick: publishSite }, icon("phone"), "휴대폰에 게시"),
     PUBLISHED ? null : h("button", { class: "quit-button", onclick: quitApp }, icon("power"), "앱 종료"),
@@ -233,7 +252,7 @@ async function publishSite(event) {
 /* ---------- dashboard ---------- */
 
 const TILES = [
-  { key: "all", label: "전체 레시피", icon: "book", match: () => true },
+  { key: "all", label: "전체 메뉴", icon: "book", match: () => true },
   { key: "one", label: "1인분", icon: "person", match: (r) => r.servings.includes(1) },
   { key: "two", label: "2인분", icon: "people", match: (r) => r.servings.includes(2) },
   { key: "review", label: "확인 필요", icon: "alert", match: needsAttention },
@@ -255,10 +274,13 @@ function renderDashboard() {
         PUBLISHED ? null : h("button", { class: "button primary", onclick: openNewDialog }, icon("plus"), "새 레시피 작성")));
     return;
   }
-  const tiles = h("div", { class: "tiles" });
+  const switcher = h("div", { class: "kind-switch", role: "group", "aria-label": "메뉴와 프렙" });
+  const tiles = h("div");
   const list = h("div");
   const paint = () => {
-    tiles.replaceChildren(...TILES.map(tile));
+    switcher.replaceChildren(...["menu", "prep"].map(kindOption));
+    tiles.className = state.kind === "prep" ? "chips" : "tiles";
+    tiles.replaceChildren(...(state.kind === "prep" ? prepChips() : TILES.map(tile)));
     list.replaceChildren(...recipeSection());
   };
   renderDashboard.paint = paint;
@@ -267,13 +289,49 @@ function renderDashboard() {
       h("div", {}, h("h1", {}, PUBLISHED ? "Cook Note" : "Dashboard"),
         h("p", { class: "muted" }, PUBLISHED ? "게시한 레시피를 확인하세요" : "저장한 레시피를 한눈에 확인하세요")),
       h("label", { class: "search" }, icon("search"), h("input", {
-        type: "search", placeholder: "메뉴명, 채널 검색", "aria-label": "레시피 검색", value: state.query,
+        type: "search", placeholder: "이름, 채널 검색", "aria-label": "레시피 검색", value: state.query,
         oninput: (event) => { state.query = event.target.value; paint(); },
       }))),
-    tiles, list);
+    switcher, tiles, list);
   paint();
   const fresh = list.querySelector(".is-new");
   if (fresh) fresh.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+function ofKind(kind) {
+  return state.recipes.filter((recipe) => (isPrep(recipe) ? "prep" : "menu") === kind);
+}
+
+function kindOption(kind) {
+  return h("button", {
+    class: "kind-option", "aria-pressed": String(state.kind === kind),
+    onclick: () => {
+      state.kind = kind;
+      state.filter = "all";
+      state.category = "all";
+      renderDashboard.paint();
+    },
+  }, KIND_NAMES[kind], h("span", { class: "kind-count" }, String(ofKind(kind).length)));
+}
+
+// Chips for prep items: every category in order, then the ones still waiting for one.
+const UNSET = "unset";
+const REVIEW = "review";
+
+function prepChoices() {
+  const choices = [{ key: "all", label: "전체", match: () => true },
+    ...state.categories.map((name) => ({ key: name, label: name, match: (r) => r.category === name }))];
+  if (ofKind("prep").some((r) => !r.category)) choices.push({ key: UNSET, label: "분류 미지정", match: (r) => !r.category });
+  if (!PUBLISHED) choices.push({ key: REVIEW, label: "확인 필요", match: needsAttention });
+  return choices;
+}
+
+function prepChips() {
+  return prepChoices().map((choice) => h("button", {
+    class: `chip ${choice.key === REVIEW || choice.key === UNSET ? "review" : ""}`,
+    "aria-pressed": String(state.category === choice.key),
+    onclick: () => { state.category = state.category === choice.key ? "all" : choice.key; renderDashboard.paint(); },
+  }, choice.label, h("span", { class: "chip-count" }, String(ofKind("prep").filter(choice.match).length))));
 }
 
 function tile(item) {
@@ -285,25 +343,33 @@ function tile(item) {
   h("span", { class: "tile-icon" }, icon(item.icon)),
   h("span", {},
     h("span", { class: "tile-label" }, item.label),
-    h("span", { class: "tile-value" }, String(state.recipes.filter(item.match).length))));
+    h("span", { class: "tile-value" }, String(ofKind("menu").filter(item.match).length))));
+}
+
+function currentChoice() {
+  if (state.kind === "menu") return TILES.find((item) => item.key === state.filter);
+  return prepChoices().find((item) => item.key === state.category) || prepChoices()[0];
 }
 
 function visibleRecipes() {
-  const { match } = TILES.find((item) => item.key === state.filter);
+  const { match } = currentChoice();
   const query = state.query.trim().toLowerCase();
-  return state.recipes.filter((recipe) => match(recipe)
+  return ofKind(state.kind).filter((recipe) => match(recipe)
     && `${recipe.menu_name || ""} ${recipe.channel || ""}`.toLowerCase().includes(query));
 }
 
 function recipeSection() {
   const recipes = visibleRecipes();
-  const { label } = TILES.find((item) => item.key === state.filter);
+  const choice = currentChoice();
+  const empty = !ofKind(state.kind).length && state.kind === "prep"
+    ? (PUBLISHED ? "아직 게시된 프렙이 없습니다." : "아직 프렙이 없습니다. 새 레시피 작성에서 프렙 안내문을 쓰거나 빈 프렙 서식으로 시작하세요.")
+    : "조건에 맞는 레시피가 없습니다.";
   return [
-    h("div", { class: "section-head" }, h("h2", {}, state.filter === "all" ? "내 레시피" : label),
+    h("div", { class: "section-head" }, h("h2", {}, choice.key === "all" ? `내 ${KIND_NAMES[state.kind]}` : choice.label),
       h("span", { class: "muted" }, `${recipes.length}개`)),
     recipes.length
-      ? h("div", { class: "cards" }, recipes.map(card))
-      : h("p", { class: "no-result" }, "조건에 맞는 레시피가 없습니다."),
+      ? h("div", { class: "cards" }, recipes.map((recipe) => (isPrep(recipe) ? prepCard(recipe) : card(recipe))))
+      : h("p", { class: "no-result" }, empty),
   ];
 }
 
@@ -318,6 +384,7 @@ function statusOf(recipe) {
   const parts = [];
   if (recipe.blank_count) parts.push(`빈칸 ${recipe.blank_count}`);
   if (recipe.loose_count) parts.push("인분 확인");
+  if (isPrep(recipe) && !recipe.category) parts.push("분류 미지정");
   return parts.length
     ? h("span", { class: "status warn" }, icon("alert"), parts.join(" · "))
     : h("span", { class: "status good" }, icon("check"), "빈칸 없음");
@@ -345,6 +412,19 @@ function card(recipe) {
       h("div", { class: "card-foot" }, PUBLISHED ? null : statusOf(recipe), h("span", {}, timeAgo(recipe.updated_at)))));
 }
 
+function prepCard(recipe) {
+  const art = h("div", { class: "art" }, recipe.photo ? h("img", { src: recipe.photo, alt: "" }) : fromMarkup(JAR_ART));
+  const isNew = recipe.id === state.highlightId;
+  if (isNew) art.append(h("span", { class: "new-tag" }, "방금 추가"));
+  return h("a", { class: `card ${isNew ? "is-new" : ""}`, href: `#/recipe/${recipe.id}` },
+    art,
+    h("div", { class: "card-body" },
+      h("div", { class: "card-title" }, recipe.menu_name || "프렙명 미확인"),
+      recipe.channel ? h("div", { class: "card-channel" }, recipe.channel) : null,
+      h("div", { class: "tags" }, h("span", { class: `tag ${recipe.category ? "prep" : "loose"}` }, recipe.category || "분류 미지정")),
+      h("div", { class: "card-foot" }, PUBLISHED ? null : statusOf(recipe), h("span", {}, timeAgo(recipe.updated_at)))));
+}
+
 function goToDashboard() {
   if (location.hash === "#/" || location.hash === "") route();
   else location.hash = "#/";
@@ -356,6 +436,8 @@ const newDialog = document.getElementById("new-dialog");
 const newText = document.getElementById("new-text");
 const newError = document.getElementById("new-error");
 const newGuide = document.getElementById("new-guide");
+const newPrepGuide = document.getElementById("new-prep-guide");
+const GUIDE_LABELS = { menu: "메뉴 안내문 복사", prep: "프렙 안내문 복사" };
 
 function showNewError(message) {
   newError.textContent = message;
@@ -365,7 +447,8 @@ function showNewError(message) {
 function openNewDialog() {
   newText.value = "";
   showNewError("");
-  newGuide.textContent = "Gemini에 함께 넣을 양식 안내문 복사";
+  newGuide.textContent = GUIDE_LABELS.menu;
+  newPrepGuide.textContent = GUIDE_LABELS.prep;
   newDialog.showModal();
 }
 
@@ -374,7 +457,9 @@ async function submitNew() {
     const recipe = await api("/api/recipes", sendJson("POST", { text: newText.value }));
     newDialog.close();
     state.highlightId = recipe.id;
+    state.kind = isPrep(recipe) ? "prep" : "menu";
     state.filter = "all";
+    state.category = "all";
     state.query = "";
     const name = recipe.menu_name || "메뉴명 미확인";
     toast(recipe.free_form
@@ -386,10 +471,10 @@ async function submitNew() {
   }
 }
 
-// Safari only allows the copy if it starts directly from the click, so the text is loaded beforehand.
-async function copyGuide() {
+// Safari only allows the copy if it starts directly from the click, so both texts are loaded beforehand.
+async function copyGuide(kind = "menu") {
   try {
-    await navigator.clipboard.writeText(state.guide);
+    await navigator.clipboard.writeText(state.guides[kind]);
     return "복사했습니다. Gemini에 붙여넣고 맨 아래에 YouTube 주소를 넣으세요.";
   } catch {
     return "복사하지 못했습니다. 다시 눌러 주세요.";
@@ -405,7 +490,10 @@ async function readFile(file) {
 function wireEditor() {
   // Inside the dialog a toast would be hidden behind it, so the link itself answers.
   newGuide.addEventListener("click", async () => {
-    newGuide.textContent = await copyGuide();
+    newGuide.textContent = await copyGuide("menu");
+  });
+  newPrepGuide.addEventListener("click", async () => {
+    newPrepGuide.textContent = await copyGuide("prep");
   });
   document.getElementById("new-form").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -416,11 +504,13 @@ function wireEditor() {
     if (event.target.files[0]) readFile(event.target.files[0]);
     event.target.value = "";
   });
-  document.getElementById("new-blank").addEventListener("click", async () => {
-    const recipe = await api("/api/recipes/blank", { method: "POST" });
+  const startBlank = async (kind) => {
+    const recipe = await api("/api/recipes/blank", sendJson("POST", { kind }));
     newDialog.close();
     location.hash = `#/recipe/${recipe.id}`;
-  });
+  };
+  document.getElementById("new-blank").addEventListener("click", () => startBlank("menu"));
+  document.getElementById("new-prep-blank").addEventListener("click", () => startBlank("prep"));
   newText.addEventListener("dragover", (event) => {
     event.preventDefault();
     newText.classList.add("dragging");
@@ -434,7 +524,11 @@ function wireEditor() {
   const rawDialog = document.getElementById("raw-dialog");
   const rawGuide = document.getElementById("raw-guide");
   rawGuide.addEventListener("click", async () => {
-    rawGuide.textContent = await copyGuide();
+    rawGuide.textContent = await copyGuide("menu");
+  });
+  const rawPrepGuide = document.getElementById("raw-prep-guide");
+  rawPrepGuide.addEventListener("click", async () => {
+    rawPrepGuide.textContent = await copyGuide("prep");
   });
   document.getElementById("raw-close").addEventListener("click", () => rawDialog.close());
   document.getElementById("raw-edit").addEventListener("click", editRaw);
@@ -500,12 +594,12 @@ function renderPublishedRecipe() {
       recipe.channel ? h("span", { class: "muted" }, recipe.channel) : null,
       h("span", { class: "spacer" }),
       link),
-    sheet(state.tab, true)));
+    isPrep(recipe) ? prepSheet(true) : sheet(state.tab, true)));
 }
 
 function renderRecipe() {
   const { recipe } = state;
-  document.title = recipe.menu_name || "레시피";
+  document.title = recipe.menu_name || (isPrep(recipe) ? "프렙" : "레시피");
   if (state.tab === LOOSE && !loosePortions().length) chooseTab();
   if (PUBLISHED) {
     renderPublishedRecipe();
@@ -524,7 +618,7 @@ function renderRecipe() {
       h("button", { class: "button danger", onclick: deleteRecipe }, icon("trash"), "삭제")),
     h("div", { class: "meta" },
       field("source_url", "출처 YouTube 주소"), link, field("channel", "채널")),
-    sheet(state.tab, false),
+    isPrep(recipe) ? prepSheet(false) : sheet(state.tab, false),
     freeFormPanel(),
     unreadPanel()));
   document.querySelectorAll("#app textarea").forEach(grow);
@@ -575,6 +669,107 @@ function tabs(active) {
       "aria-pressed": String(tab === active),
       onclick: () => { state.tab = tab; renderRecipe(); },
     }, tabName(tab))));
+}
+
+/* ---------- prep sheet ---------- */
+
+// A prep item's sheet: no serving tabs, just its info line and batch tables, then where it is used.
+function prepSheet(readonly) {
+  const { recipe } = state;
+  return h("section", { class: "sheet prep-sheet" },
+    h("div", { class: "title-row" },
+      h("span", { class: "eyebrow" }, "프렙"),
+      readonly
+        ? h("h1", {}, recipe.menu_name || "프렙명 미확인")
+        : h("input", {
+          value: recipe.menu_name || "", placeholder: "프렙명 입력", "aria-label": "프렙명",
+          oninput: (event) => { recipe.menu_name = event.target.value; changed(); },
+        })),
+    prepInfo(readonly),
+    prepBody(readonly),
+    !readonly || recipe.steps.length ? [h("h2", { class: "section-title" }, "제조방법"), stepsArea(readonly)] : null,
+    usedIn(),
+    !readonly || recipe.memo ? [h("h2", { class: "section-title" }, "메모"), memoArea(readonly)] : null);
+}
+
+// Only what the video said is kept here, so the phone hides an empty field instead of showing a blank.
+function prepInfo(readonly) {
+  const { recipe } = state;
+  if (readonly) {
+    const shown = [["분류", recipe.category || (PUBLISHED ? null : "미지정")],
+      ...INFO_FIELDS.map(([key, title]) => [title, recipe[key]])].filter(([, value]) => value || !PUBLISHED);
+    if (!shown.length) return null;
+    return h("div", { class: `prep-info cols-${shown.length}` }, shown.map(([title, value]) =>
+      h("div", {}, h("span", { class: "info-label" }, title), h("span", { class: "info-value" }, value || ""))));
+  }
+  const select = h("select", {
+    "aria-label": "분류",
+    onchange: () => {
+      recipe.category = select.value || null;
+      select.parentElement.classList.toggle("unset", !recipe.category);
+      changed();
+    },
+  },
+  h("option", { value: "", selected: !recipe.category }, "분류 미지정"),
+  state.categories.map((name) => h("option", { value: name, selected: recipe.category === name }, name)));
+  return h("div", { class: "prep-info" },
+    h("div", { class: recipe.category ? "" : "unset" }, h("span", { class: "info-label" }, "분류"), select),
+    INFO_FIELDS.map(([key, title]) => h("div", {}, h("span", { class: "info-label" }, title), h("input", {
+      value: recipe[key] || "", placeholder: "미확인", "aria-label": title,
+      oninput: (event) => { recipe[key] = event.target.value; changed(); },
+    }))));
+}
+
+function prepBody(readonly) {
+  const picture = photo(readonly);
+  const batches = state.recipe.portions;
+  const slots = batches.length ? batches.map(batchSlot) : [batchSlot(null)];
+  return h("div", { class: `body-row ${picture ? "" : "no-photo"}` }, picture,
+    h("div", { class: "tables" }, slots.map((slot) => portionTable(slot, readonly, false))));
+}
+
+// One slot per batch. A blank prep gets one empty slot that becomes a batch when typed into.
+function batchSlot(portion) {
+  const slot = {
+    label: "배합",
+    find: () => portion || state.recipe.portions[0],
+    make: () => {
+      const made = { serving: null, label: null, note: null, ingredients: [] };
+      state.recipe.portions.push(made);
+      return made;
+    },
+    // The batch basis is the video's own words, such as "간장 1컵 기준". Nothing is scaled from it.
+    head: (found, readonly) => {
+      const label = found ? found.label : null;
+      return h("div", { class: "portion-head" },
+        h("strong", {}, "배합"),
+        readonly
+          ? h("span", { class: label ? "" : "original" }, label || "배합 기준 미확인")
+          : h("input", {
+            class: "batch-label", value: label || "", placeholder: "배합 기준 (예: 간장 1컵 기준)", "aria-label": "배합 기준",
+            oninput: (event) => { (slot.find() || slot.make()).label = event.target.value; changed(); },
+          }));
+    },
+  };
+  return slot;
+}
+
+function useWhere(use) {
+  if (use.kind === "prep") return "프렙";
+  return use.serving ? `${use.serving}인분` : "인분 미지정";
+}
+
+// Dishes whose ingredient name matches this prep's name, worked out by the Mac app when it loads.
+function usedIn() {
+  const uses = state.recipe.used_in || [];
+  if (PUBLISHED && !uses.length) return null;
+  return [h("h2", { class: "section-title" }, "이 프렙을 쓰는 메뉴"),
+    uses.length
+      ? h("ul", { class: "used-in" }, uses.map((use) => h("li", {},
+        h("a", { href: `#/recipe/${use.id}` }, use.menu_name || "메뉴명 미확인"),
+        h("span", { class: "muted" }, [useWhere(use), use.amount, use.aux].filter(Boolean).join(" · ")))))
+      : h("p", { class: "used-empty muted" },
+        "아직 이 프렙을 재료로 쓰는 메뉴가 없습니다. 메뉴 재료표의 재료명을 프렙명과 똑같이 쓰면 여기에 연결됩니다.")];
 }
 
 function photo(readonly) {
@@ -665,7 +860,7 @@ function portionTable(slot, readonly, printing) {
   for (let index = 0; index < total; index += 1) rows.push(ingredientRow(slot, index, readonly));
   if (!rows.length) rows.push(h("tr", {}, h("td", { colSpan: 4, class: "no-rows" }, "재료 정보가 없습니다")));
   return h("div", { class: "portion" },
-    portionHead(slot, portion, readonly, printing),
+    slot.head ? slot.head(portion, readonly) : portionHead(slot, portion, readonly, printing),
     h("table", { class: "ingredients" },
       h("colgroup", {},
         h("col", { style: "width:27%" }), h("col", { style: "width:17%" }),
@@ -713,7 +908,8 @@ function ingredientRow(slot, index, readonly) {
   const portion = slot.find();
   const row = portion ? portion.ingredients[index] : null;
   if (readonly) {
-    return h("tr", {}, ["name", "amount", "aux", "note"].map((key) => h("td", {}, (row && row[key]) || "")));
+    return h("tr", {}, ["name", "amount", "aux", "note"].map((key) => h("td", {}, (row && row[key]) || "",
+      key === "name" ? prepLink(row) : null)));
   }
   // Many ingredients are counted, like "감자 2개", so a row is blank only with neither quantity.
   const paintBlank = (cells) => {
@@ -735,6 +931,8 @@ function ingredientRow(slot, index, readonly) {
       changed();
     },
   })));
+  const link = prepLink(row);
+  if (link) cells[0].append(link);
   paintBlank(cells);
   const end = h("td", { class: "row-end" }, row
     ? h("button", {
@@ -751,6 +949,12 @@ function ingredientRow(slot, index, readonly) {
       onclick: () => { ensureRow(slot.find() || slot.make(), index); renderRecipe(); },
     }, "+"));
   return h("tr", {}, cells, end);
+}
+
+// An ingredient named like a saved prep item links to it. The link follows the name as last loaded.
+function prepLink(row) {
+  if (!row || !row.prep_id) return null;
+  return h("a", { class: "prep-link", href: `#/recipe/${row.prep_id}`, title: "프렙 레시피 열기" }, "프렙");
 }
 
 function stepsText(steps) {
@@ -804,7 +1008,8 @@ function freeFormPanel() {
   return h("section", { class: "panel" },
     h("h3", {}, "재료표가 비어 있습니다"),
     h("p", {}, "요약글의 문장 속 분량은 추측하지 않고 비워 둡니다. 직접 입력하거나, 양식 안내문을 함께 넣어 Gemini 답변을 다시 받으면 자동으로 채워집니다."),
-    h("button", { class: "link", onclick: async () => toast(await copyGuide()) }, "양식 안내문 복사"));
+    h("button", { class: "link", onclick: async () => toast(await copyGuide(isPrep(recipe) ? "prep" : "menu")) },
+      isPrep(recipe) ? "프렙 안내문 복사" : "메뉴 안내문 복사"));
 }
 
 function unreadPanel() {
@@ -833,7 +1038,8 @@ function showRaw() {
   const text = state.recipe.raw_text;
   document.getElementById("raw-text").textContent = text;
   document.getElementById("raw-input").value = text || "";
-  document.getElementById("raw-guide").textContent = "Gemini에 함께 넣을 양식 안내문 복사";
+  document.getElementById("raw-guide").textContent = GUIDE_LABELS.menu;
+  document.getElementById("raw-prep-guide").textContent = GUIDE_LABELS.prep;
   setRawEditing(!text);
   document.getElementById("raw-dialog").showModal();
 }
@@ -877,7 +1083,7 @@ async function undoRaw() {
 }
 
 function printRecipe() {
-  document.getElementById("print-root").replaceChildren(sheet(null, true));
+  document.getElementById("print-root").replaceChildren(isPrep(state.recipe) ? prepSheet(true) : sheet(null, true));
   window.print();
 }
 
@@ -919,8 +1125,9 @@ window.addEventListener("hashchange", route);
 if (!PUBLISHED) wireEditor();
 if (PUBLISHED && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 
-readSetup().then(({ guide }) => {
-  state.guide = guide;
+readSetup().then(({ guides, categories }) => {
+  state.guides = guides;
+  state.categories = categories;
   route();
 }).catch((error) => {
   app.replaceChildren(h("p", { class: "no-result" }, error.message));
