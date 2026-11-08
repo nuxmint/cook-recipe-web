@@ -32,6 +32,7 @@
    "yield_text": null,
    "storage_method": null,
    "storage_period": null,
+   "aliases": [],
    "portions": [
     {
      "serving": null,
@@ -167,6 +168,7 @@
    "yield_text": null,
    "storage_method": null,
    "storage_period": null,
+   "aliases": [],
    "portions": [
     {
      "serving": 1,

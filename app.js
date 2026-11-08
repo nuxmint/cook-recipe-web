@@ -183,6 +183,46 @@ function isPrep(recipe) {
   return recipe.kind === "prep";
 }
 
+// The same comparison as prep.name_key: spaces and letter case do not count.
+function nameKey(name) {
+  return (name || "").replace(/\s+/g, "").toLowerCase();
+}
+
+// Which prep each ingredient name stands for, worked out like storage._prep_ids:
+// a prep's own name comes before its other names, and the older prep wins a tie.
+function prepIndex() {
+  if (prepIndex.source === state.recipes) return prepIndex.map;
+  const preps = state.recipes.filter(isPrep).sort((a, b) => a.id - b.id);
+  const map = new Map();
+  const add = (name, prep) => {
+    const key = nameKey(name);
+    if (key && !map.has(key)) map.set(key, prep);
+  };
+  preps.forEach((prep) => add(prep.menu_name, prep));
+  preps.forEach((prep) => (prep.aliases || []).forEach((alias) => add(alias, prep)));
+  prepIndex.source = state.recipes;
+  prepIndex.map = map;
+  return map;
+}
+
+function linkedPrep(name) {
+  const prep = prepIndex().get(nameKey(name));
+  return prep && prep.id !== state.recipe.id ? prep : null;
+}
+
+// Korean particles follow the last syllable: 을/를, 과/와, 이/가, and 으로/로, where ㄹ also takes 로.
+function josa(word, withFinal, withoutFinal) {
+  const code = (word || "").trim().slice(-1).charCodeAt(0) - 0xac00;
+  if (!(code >= 0 && code < 11172)) return withoutFinal;
+  const final = code % 28;
+  return final && !(withFinal === "으로" && final === 8) ? withFinal : withoutFinal;
+}
+
+// Enter that finishes a Korean syllable is not a submit. Safari reports it as key code 229.
+function composing(event) {
+  return event.isComposing || event.keyCode === 229;
+}
+
 // A prep item has no serving to settle, but it waits for review until it has a category.
 function needsAttention(recipe) {
   return recipe.blank_count > 0 || recipe.loose_count > 0 || recipe.portion_count === 0 || (isPrep(recipe) && !recipe.category);
@@ -355,7 +395,7 @@ function visibleRecipes() {
   const { match } = currentChoice();
   const query = state.query.trim().toLowerCase();
   return ofKind(state.kind).filter((recipe) => match(recipe)
-    && `${recipe.menu_name || ""} ${recipe.channel || ""}`.toLowerCase().includes(query));
+    && `${recipe.menu_name || ""} ${recipe.channel || ""} ${(recipe.aliases || []).join(" ")}`.toLowerCase().includes(query));
 }
 
 function recipeSection() {
@@ -599,6 +639,7 @@ function renderPublishedRecipe() {
 
 function renderRecipe() {
   const { recipe } = state;
+  closePop();
   document.title = recipe.menu_name || (isPrep(recipe) ? "프렙" : "레시피");
   if (state.tab === LOOSE && !loosePortions().length) chooseTab();
   if (PUBLISHED) {
@@ -684,12 +725,48 @@ function prepSheet(readonly) {
         : h("input", {
           value: recipe.menu_name || "", placeholder: "프렙명 입력", "aria-label": "프렙명",
           oninput: (event) => { recipe.menu_name = event.target.value; changed(); },
-        })),
+        }),
+      readonly ? aliasLine() : aliasRow()),
     prepInfo(readonly),
     prepBody(readonly),
     !readonly || recipe.steps.length ? [h("h2", { class: "section-title" }, "제조방법"), stepsArea(readonly)] : null,
     usedIn(),
     !readonly || recipe.memo ? [h("h2", { class: "section-title" }, "메모"), memoArea(readonly)] : null);
+}
+
+// Other names the prep goes by in menus, like 만능 간장 for 만능 간장소스. They are typed here or come from a
+// menu's [+프렙], never from a Gemini answer, so refilling and undo leave them alone.
+function aliasLine() {
+  const aliases = state.recipe.aliases || [];
+  return aliases.length ? h("div", { class: "alias-line" }, `다른 이름 · ${aliases.join(", ")}`) : null;
+}
+
+function aliasRow() {
+  const recipe = state.recipe;
+  const input = h("input", { class: "alias-input", placeholder: "다른 이름 입력 후 Enter", "aria-label": "다른 이름 추가" });
+  const add = async () => {
+    const name = input.value.trim();
+    if (!name) return;
+    if (await linkPrep(recipe, name)) {
+      const next = document.querySelector(".alias-input");
+      if (next) next.focus();
+    }
+  };
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !composing(event)) {
+      event.preventDefault();
+      add();
+    }
+  });
+  return h("div", { class: "alias-row" },
+    h("div", { class: "alias-label" }, "다른 이름"),
+    h("div", { class: "alias-list" },
+      (recipe.aliases || []).map((name) => h("span", { class: "alias-chip" }, name, h("button", {
+        type: "button", class: "alias-remove", title: `'${name}' 빼기`, "aria-label": `${name} 빼기`,
+        onclick: () => unlinkPrep(recipe, name),
+      }, "×"))),
+      input,
+      h("button", { type: "button", class: "button small", onclick: add }, "추가")));
 }
 
 // Only what the video said is kept here, so the phone hides an empty field instead of showing a blank.
@@ -759,17 +836,20 @@ function useWhere(use) {
   return use.serving ? `${use.serving}인분` : "인분 미지정";
 }
 
-// Dishes whose ingredient name matches this prep's name, worked out by the Mac app when it loads.
+// Dishes whose ingredient name is this prep's name or one of its other names, worked out by the Mac app when it loads.
 function usedIn() {
-  const uses = state.recipe.used_in || [];
+  const { recipe } = state;
+  const uses = recipe.used_in || [];
   if (PUBLISHED && !uses.length) return null;
+  const via = (use) => (use.name && nameKey(use.name) !== nameKey(recipe.menu_name)
+    ? `'${use.name}'${josa(use.name, "으로", "로")} 연결` : null);
   return [h("h2", { class: "section-title" }, "이 프렙을 쓰는 메뉴"),
     uses.length
       ? h("ul", { class: "used-in" }, uses.map((use) => h("li", {},
         h("a", { href: `#/recipe/${use.id}` }, use.menu_name || "메뉴명 미확인"),
-        h("span", { class: "muted" }, [useWhere(use), use.amount, use.aux].filter(Boolean).join(" · ")))))
+        h("span", { class: "muted" }, [useWhere(use), use.amount, use.aux, via(use)].filter(Boolean).join(" · ")))))
       : h("p", { class: "used-empty muted" },
-        "아직 이 프렙을 재료로 쓰는 메뉴가 없습니다. 메뉴 재료표의 재료명을 프렙명과 똑같이 쓰면 여기에 연결됩니다.")];
+        "아직 이 프렙을 재료로 쓰는 메뉴가 없습니다. 메뉴 재료표에서 재료명 옆 [+프렙]을 누르거나, 재료명을 프렙명이나 다른 이름과 똑같이 쓰면 여기에 연결됩니다.")];
 }
 
 function photo(readonly) {
@@ -864,7 +944,7 @@ function portionTable(slot, readonly, printing) {
     h("table", { class: "ingredients" },
       h("colgroup", {},
         h("col", { style: "width:27%" }), h("col", { style: "width:17%" }),
-        h("col", { style: "width:19%" }), h("col"), readonly ? null : h("col", { style: "width:26px" })),
+        h("col", { style: "width:19%" }), h("col"), readonly ? null : h("col", { style: "width:30px" })),
       h("thead", {}, h("tr", {},
         ["재료명", "분량(단위)", "보조(단위)", "비고"].map((name) => h("th", {}, name)),
         readonly ? null : h("th", { class: "row-end" }))),
@@ -918,6 +998,11 @@ function ingredientRow(slot, index, readonly) {
     cells[1].classList.toggle("blank", blank);
     cells[2].classList.toggle("blank", blank);
   };
+  const chip = h("span", { class: "chip-slot" });
+  const paintChip = () => {
+    const current = slot.find() ? slot.find().ingredients[index] : null;
+    chip.replaceChildren(...[prepChip(current && current.name)].filter(Boolean));
+  };
   const cells = ["name", "amount", "aux", "note"].map((key) => h("td", {}, h(key === "note" ? "textarea" : "input", {
     value: (row && row[key]) || "",
     rows: key === "note" ? 1 : null,
@@ -927,16 +1012,18 @@ function ingredientRow(slot, index, readonly) {
     oninput: (event) => {
       ensureRow(slot.find() || slot.make(), index)[key] = event.target.value;
       if (key === "note") grow(event.target);
+      if (key === "name") paintChip();
       paintBlank(cells);
       changed();
     },
   })));
-  const link = prepLink(row);
-  if (link) cells[0].append(link);
+  cells[0].classList.add("name-cell");
+  cells[0].append(chip);
+  paintChip();
   paintBlank(cells);
   const end = h("td", { class: "row-end" }, row
     ? h("button", {
-      class: "row-delete", title: "행 삭제",
+      class: "row-tool row-delete", title: "행 삭제", "aria-label": "행 삭제",
       onclick: () => {
         portion.ingredients.splice(index, 1);
         if (!portion.ingredients.length) state.recipe.portions.splice(state.recipe.portions.indexOf(portion), 1);
@@ -945,16 +1032,206 @@ function ingredientRow(slot, index, readonly) {
       },
     }, "×")
     : h("button", {
-      class: "row-delete", title: "행 추가",
+      class: "row-tool row-add", title: "행 추가", "aria-label": "행 추가",
       onclick: () => { ensureRow(slot.find() || slot.make(), index); renderRecipe(); },
     }, "+"));
   return h("tr", {}, cells, end);
 }
 
-// An ingredient named like a saved prep item links to it. The link follows the name as last loaded.
+// On the read-only sheet an ingredient that stands for a prep links to it.
 function prepLink(row) {
-  if (!row || !row.prep_id) return null;
-  return h("a", { class: "prep-link", href: `#/recipe/${row.prep_id}`, title: "프렙 레시피 열기" }, "프렙");
+  const prep = row && row.name ? linkedPrep(row.name) : null;
+  if (!prep) return null;
+  return h("a", { class: "prep-link", href: `#/recipe/${prep.id}`, title: "프렙 레시피 열기" }, "프렙");
+}
+
+/* ---------- linking ingredients to prep items ---------- */
+
+function otherPreps() {
+  return state.recipes.filter((recipe) => isPrep(recipe) && recipe.id !== state.recipe.id);
+}
+
+// Similar names are only offered, never linked: one name holds the other, like 크림 and 수제크림.
+function similarPreps(name) {
+  const key = nameKey(name);
+  if (key.length < 2) return [];
+  return otherPreps().filter((prep) => [prep.menu_name, ...(prep.aliases || [])].some((other) => {
+    const otherKey = nameKey(other);
+    return otherKey.length >= 2 && (otherKey.includes(key) || key.includes(otherKey));
+  }));
+}
+
+// [프렙] on a linked row, [+프렙] on an unlinked one. [+프렙] shows on hover unless a similar prep exists.
+function prepChip(name) {
+  const text = (name || "").trim();
+  if (!text) return null;
+  const prep = linkedPrep(text);
+  if (prep) {
+    return h("button", {
+      type: "button", class: "prep-link", title: `${prep.menu_name || "프렙"} · 열기 또는 연결 풀기`,
+      onclick: (event) => openLinkMenu(event.currentTarget, text, prep),
+    }, "프렙");
+  }
+  if (!otherPreps().length) return null;
+  const similar = similarPreps(text);
+  return h("button", {
+    type: "button", class: `prep-add ${similar.length ? "suggested" : ""}`,
+    title: similar.length ? `비슷한 프렙: ${similar.map((p) => p.menu_name).join(", ")}` : "프렙과 연결",
+    onclick: (event) => openPrepPicker(event.currentTarget, text),
+  }, similar.length ? "+프렙 후보" : "+프렙");
+}
+
+let pop = null;
+
+function closePop() {
+  if (pop) pop.remove();
+  pop = null;
+}
+
+function openPop(anchor, ...children) {
+  closePop();
+  pop = h("div", { class: "prep-pop", role: "dialog" }, ...children);
+  pop.anchor = anchor;
+  document.body.append(pop);
+  const box = anchor.getBoundingClientRect();
+  const height = pop.offsetHeight;
+  const left = Math.min(Math.max(8, box.left), document.documentElement.clientWidth - pop.offsetWidth - 8);
+  const below = box.bottom + 4 + height <= window.innerHeight || box.top - 4 - height < 0;
+  pop.style.left = `${left + window.scrollX}px`;
+  pop.style.top = `${(below ? box.bottom + 4 : box.top - 4 - height) + window.scrollY}px`;
+  const first = pop.querySelector("input, button");
+  if (first) first.focus();
+}
+
+document.addEventListener("mousedown", (event) => {
+  if (pop && !pop.contains(event.target) && !pop.anchor.contains(event.target)) closePop();
+});
+document.addEventListener("keydown", (event) => {
+  if (pop && event.key === "Escape") closePop();
+});
+
+function openPrepPicker(anchor, name) {
+  if (pop && pop.anchor === anchor) {
+    closePop();
+    return;
+  }
+  const preps = otherPreps();
+  const similar = similarPreps(name);
+  const list = h("div", { class: "pop-list" });
+  const item = (prep) => h("button", { type: "button", class: "pop-item", onclick: () => linkPrep(prep, name) },
+    h("span", {}, prep.menu_name || "프렙명 미확인"),
+    prep.aliases && prep.aliases.length ? h("span", { class: "pop-aliases" }, prep.aliases.join(", ")) : null);
+  const search = h("input", {
+    type: "search", placeholder: "프렙 검색", "aria-label": "프렙 검색",
+    oninput: () => paint(),
+    onkeydown: (event) => {
+      if (event.key !== "Enter" || composing(event)) return;
+      event.preventDefault();
+      const first = list.querySelector(".pop-item");
+      if (first) first.click();
+    },
+  });
+  const paint = () => {
+    const query = nameKey(search.value);
+    const shown = (prep) => !query || [prep.menu_name, ...(prep.aliases || [])].some((n) => nameKey(n).includes(query));
+    const groups = [
+      ...(query ? [] : [["비슷한 이름", similar]]),
+      ...state.categories.map((category) => [category, preps.filter((p) => p.category === category)]),
+      ["분류 미지정", preps.filter((p) => !p.category)],
+    ].map(([title, items]) => [title, items.filter(shown)]).filter(([, items]) => items.length);
+    list.replaceChildren(...(groups.length
+      ? groups.flatMap(([title, items]) => [h("p", { class: "pop-group" }, title), ...items.map(item)])
+      : [h("p", { class: "pop-empty" }, "맞는 프렙이 없습니다.")]));
+  };
+  paint();
+  openPop(anchor,
+    h("p", { class: "pop-title" }, `'${name}'${josa(name, "과", "와")} 연결할 프렙`),
+    search, list,
+    h("p", { class: "pop-note" }, `고른 프렙의 다른 이름에 '${name}'${josa(name, "이", "가")} 들어갑니다.`));
+}
+
+function openLinkMenu(anchor, name, prep) {
+  if (pop && pop.anchor === anchor) {
+    closePop();
+    return;
+  }
+  const byAlias = nameKey(name) !== nameKey(prep.menu_name);
+  openPop(anchor,
+    h("p", { class: "pop-title" }, `프렙 · ${prep.menu_name || "프렙명 미확인"}`),
+    byAlias ? h("p", { class: "pop-note" }, `다른 이름 '${name}'${josa(name, "으로", "로")} 연결되어 있습니다.`) : null,
+    h("button", {
+      type: "button", class: "pop-item",
+      onclick: () => { closePop(); location.hash = `#/recipe/${prep.id}`; },
+    }, "프렙 열기"),
+    byAlias
+      ? h("button", { type: "button", class: "pop-item danger", onclick: () => unlinkPrep(prep, name) }, "연결 풀기")
+      : h("p", { class: "pop-note" }, "재료명이 프렙 이름과 같아서 연결되어 있습니다. 풀려면 재료명을 바꾸세요."));
+}
+
+// Other recipes with this ingredient name: a link or unlink changes them too, so they are named first.
+async function usesElsewhere(name, prep) {
+  try {
+    const uses = await api(`/api/uses?name=${encodeURIComponent(name)}`);
+    return uses.filter((use) => use.id !== state.recipe.id && use.id !== prep.id)
+      .map((use) => use.menu_name || (isPrep(use) ? "프렙명 미확인" : "메뉴명 미확인"));
+  } catch (error) {
+    toast(error.message, 5000);
+    return null;
+  }
+}
+
+async function changeAlias(method, prep, name, message) {
+  try {
+    const saved = await api(`/api/recipes/${prep.id}/aliases`, sendJson(method, { name }));
+    if (state.recipe && state.recipe.id === saved.id) {
+      state.recipe.aliases = saved.aliases;
+      state.recipe.used_in = saved.used_in;
+      state.recipe.md_name = saved.md_name;
+    }
+    await loadRecipes();
+    renderRecipe();
+    toast(message, 3500);
+    return true;
+  } catch (error) {
+    toast(error.message, 5000);
+    return false;
+  }
+}
+
+// A name that already stands for a prep is answered at once, before any question about other recipes.
+// The server checks the same rules again.
+function takenMessage(name, prep) {
+  const owner = prepIndex().get(nameKey(name));
+  if (!owner) return null;
+  if (owner.id !== prep.id) return `이미 '${owner.menu_name || "프렙명 미확인"}' 프렙에 연결된 이름입니다: ${name}`;
+  return nameKey(name) === nameKey(prep.menu_name)
+    ? "프렙 이름과 같은 이름은 따로 넣지 않아도 연결됩니다."
+    : `'${name}'${josa(name, "은", "는")} 이미 이 프렙의 다른 이름입니다.`;
+}
+
+async function linkPrep(prep, name) {
+  closePop();
+  await save(); // Saving reloads the recipe list, so the checks below see the latest names.
+  const taken = takenMessage(name, prep);
+  if (taken) {
+    toast(taken, 4000);
+    return false;
+  }
+  const others = await usesElsewhere(name, prep);
+  if (others === null) return false;
+  const prepName = prep.menu_name || "프렙명 미확인";
+  if (others.length && !confirm(`'${name}'${josa(name, "을", "를")} '${prepName}'의 다른 이름으로 넣으면, 이 이름을 쓰는 다른 레시피 ${others.length}곳도 함께 연결됩니다.\n\n${others.join(", ")}\n\n연결할까요?`)) return false;
+  return changeAlias("POST", prep, name, `'${name}'${josa(name, "을", "를")} '${prepName}'의 다른 이름에 넣었습니다.`);
+}
+
+async function unlinkPrep(prep, name) {
+  closePop();
+  await save();
+  const others = await usesElsewhere(name, prep);
+  if (others === null) return false;
+  const prepName = prep.menu_name || "프렙명 미확인";
+  if (others.length && !confirm(`'${name}'${josa(name, "을", "를")} '${prepName}'의 다른 이름에서 빼면, 이 이름을 쓰는 다른 레시피 ${others.length}곳도 함께 연결이 풀립니다.\n\n${others.join(", ")}\n\n뺄까요?`)) return false;
+  return changeAlias("DELETE", prep, name, `'${name}'${josa(name, "을", "를")} '${prepName}'의 다른 이름에서 뺐습니다.`);
 }
 
 function stepsText(steps) {
@@ -1100,6 +1377,7 @@ async function deleteRecipe() {
 /* ---------- routing ---------- */
 
 async function route() {
+  closePop();
   await save();
   try {
     await loadRecipes();

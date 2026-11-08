@@ -233,6 +233,49 @@ a { color: inherit; }
   font-size: 11px; font-weight: 800; line-height: 19px; text-decoration: none; white-space: nowrap;
 }
 .prep-link:hover { background: var(--tomato); color: #fff; }
+button.prep-link { border: 0; font-family: inherit; cursor: pointer; }
+/* [+프렙] floats over the name cell on hover, so rows keep their height; a similar prep keeps it in view. */
+.ingredients td.name-cell { position: relative; }
+.prep-add {
+  position: absolute; top: 7px; right: 4px; z-index: 1; display: none; padding: 0 8px;
+  border: 1px dashed var(--tomato-dark); border-radius: 99px; background: var(--surface); color: var(--tomato-dark); box-shadow: 0 1px 4px rgba(47, 58, 36, .16);
+  font: inherit; font-size: 11px; font-weight: 800; line-height: 18px; white-space: nowrap; cursor: pointer;
+}
+.ingredients td.name-cell:hover .prep-add, .ingredients td.name-cell:focus-within .prep-add { display: inline-block; }
+/* While [+프렙] shows, the name moves aside instead of being covered. */
+.ingredients td.name-cell input { transition: padding .12s; }
+.ingredients td.name-cell:hover:has(.prep-add:not(.suggested)) input,
+.ingredients td.name-cell:focus-within:has(.prep-add:not(.suggested)) input { padding-right: 54px; }
+.prep-add.suggested { position: static; display: inline-block; margin: 0 6px 4px; border-color: var(--warn); background: var(--warn-tint); color: var(--warn); box-shadow: none; }
+.prep-add:hover, .prep-add.suggested:hover { border-style: solid; border-color: var(--tomato); background: var(--tomato); color: #fff; }
+.prep-pop {
+  position: absolute; z-index: 20; display: flex; flex-direction: column; gap: 7px; width: 270px; max-height: 360px; padding: 12px;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-lift);
+}
+.prep-pop input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--canvas); color: var(--ink); font: inherit; }
+.pop-title { font-weight: 750; }
+.pop-note { color: var(--ink-soft); font-size: 12px; }
+.pop-list { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; }
+.pop-group { margin-top: 6px; padding: 0 8px 2px; color: var(--ink-soft); font-size: 11px; font-weight: 750; }
+.pop-item {
+  display: flex; flex-direction: column; align-items: flex-start; padding: 6px 8px; border: 0; border-radius: 8px;
+  background: none; color: var(--ink); font: inherit; font-weight: 650; text-align: left; cursor: pointer;
+}
+.pop-item:hover, .pop-item:focus-visible { background: var(--olive-tint); }
+.pop-item.danger { color: var(--tomato-dark); }
+.pop-item.danger:hover { background: var(--tomato-tint); }
+.pop-aliases { color: var(--ink-soft); font-size: 12px; font-weight: 400; }
+.pop-empty { padding: 8px; color: var(--ink-soft); }
+/* Other names sit under the prep name: chips to remove on the Mac, one small line on the phone and in print. */
+.alias-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.alias-label { margin-right: 4px; color: var(--ink-soft); font-size: 12px; font-weight: 800; letter-spacing: .04em; }
+.alias-chip { display: inline-flex; align-items: center; gap: 1px; padding: 1px 3px 1px 10px; border-radius: 99px; background: var(--tomato-tint); color: var(--tomato-dark); font-size: 13px; font-weight: 750; }
+.alias-list { display: contents; }
+.alias-remove { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: none; color: #4a3a30; font: inherit; font-size: 15px; line-height: 1; cursor: pointer; }
+.alias-remove:hover { background: #fff; color: var(--tomato-dark); }
+.title-row .alias-input { flex: 1; width: auto; min-width: 160px; padding: 4px 8px; font-family: inherit; font-size: 14px; font-weight: 500; line-height: 1.5; letter-spacing: 0; }
+.title-row .alias-input:focus { background: var(--olive-tint); }
+.alias-line { margin-top: 4px; color: var(--ink-soft); font-size: 14px; font-weight: 600; }
 .used-in { margin: 0; padding: 0 0 0 20px; line-height: 2; }
 .used-in a { margin-right: 8px; color: var(--tomato-dark); font-weight: 750; }
 .used-empty { padding: 4px 0; }
@@ -246,11 +289,18 @@ a { color: inherit; }
 .ingredients td:first-child, .ingredients td:first-child input { font-weight: 650; }
 html[data-mode="published"] .ingredients td, #print-root .ingredients td { padding: 6px; }
 .ingredients textarea { display: block; resize: none; overflow: hidden; line-height: 1.4; }
-.ingredients .row-end { width: 26px; text-align: center; }
+.ingredients .row-end { width: 30px; text-align: center; vertical-align: middle; }
 .ingredients td.no-rows { padding: 16px 6px; color: var(--ink-soft); }
 td.blank, td.blank input { background: var(--butter); }
-.row-delete { border: 0; background: none; padding: 4px; color: #a8a48f; font: inherit; cursor: pointer; }
-.row-delete:hover { color: var(--tomato); }
+/* Row buttons: + to add a row in olive, × darker but quieter, tomato only under the pointer. */
+.row-tool {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border-radius: 50%; vertical-align: middle;
+  font: inherit; font-size: 17px; font-weight: 700; line-height: 1; cursor: pointer; transition: background .15s, color .15s;
+}
+.row-add { border: 1.5px solid var(--olive); background: var(--surface); color: var(--olive); }
+.row-add:hover { background: var(--olive); color: #fff; }
+.row-delete { border: 1.5px solid transparent; background: none; color: #3f4234; }
+.row-delete:hover { border-color: #f1c4b8; background: var(--tomato-tint); color: var(--tomato-dark); }
 .section-title { display: flex; align-items: center; gap: 12px; margin: 30px 0 10px; font-family: var(--display); font-size: 21px; letter-spacing: -.02em; }
 .section-title::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
 .sheet textarea.writing { display: block; min-height: 96px; padding: 10px 12px; overflow: hidden; resize: none; border-radius: 10px; background: var(--canvas); line-height: 1.7; }
@@ -352,7 +402,7 @@ html[data-mode="published"] #app {
 @media print {
   @page { margin: 12mm; }
   html, body { height: auto; background: #fff; font-size: 11px; }
-  .shell, #toast, dialog { display: none !important; }
+  .shell, #toast, dialog, .prep-pop { display: none !important; }
   #print-root { display: block; }
   #print-root .sheet { padding: 0; border-radius: 0; box-shadow: none; background: #fff; }
   #print-root h1 { font-size: 24px; }
