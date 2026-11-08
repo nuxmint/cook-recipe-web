@@ -319,21 +319,30 @@ function renderDashboard() {
   const switcher = h("div", { class: "kind-switch", role: "group", "aria-label": "메뉴와 프렙" });
   const tiles = h("div");
   const list = h("div");
+  const search = h("input", {
+    type: "search", placeholder: "메뉴명, 채널, 재료명 검색", "aria-label": "레시피 검색", value: state.query,
+    oninput: (event) => { state.query = event.target.value; paint(); },
+  });
   const paint = () => {
+    content.classList.toggle("is-searching", Boolean(searchKey()));
     switcher.replaceChildren(...["menu", "prep"].map(kindOption));
     tiles.className = state.kind === "prep" ? "chips" : "tiles";
     tiles.replaceChildren(...(state.kind === "prep" ? prepChips() : TILES.map(tile)));
     list.replaceChildren(...recipeSection());
   };
   renderDashboard.paint = paint;
+  // Pressing the switch, a tile or a chip while searching goes back to browsing. Returns whether a search was on.
+  renderDashboard.endSearch = () => {
+    const searching = Boolean(searchKey());
+    state.query = "";
+    search.value = "";
+    return searching;
+  };
   content.append(
     h("div", { class: "page-head" },
       h("div", {}, h("h1", {}, PUBLISHED ? "Cook Note" : "Dashboard"),
         h("p", { class: "muted" }, PUBLISHED ? "게시한 레시피를 확인하세요" : "저장한 레시피를 한눈에 확인하세요")),
-      h("label", { class: "search" }, icon("search"), h("input", {
-        type: "search", placeholder: "이름, 채널 검색", "aria-label": "레시피 검색", value: state.query,
-        oninput: (event) => { state.query = event.target.value; paint(); },
-      }))),
+      h("label", { class: "search" }, icon("search"), search)),
     switcher, tiles, list);
   paint();
   const fresh = list.querySelector(".is-new");
@@ -348,6 +357,7 @@ function kindOption(kind) {
   return h("button", {
     class: "kind-option", "aria-pressed": String(state.kind === kind),
     onclick: () => {
+      renderDashboard.endSearch();
       state.kind = kind;
       state.filter = "all";
       state.category = "all";
@@ -372,7 +382,11 @@ function prepChips() {
   return prepChoices().map((choice) => h("button", {
     class: `chip ${choice.key === REVIEW || choice.key === UNSET ? "review" : ""}`,
     "aria-pressed": String(state.category === choice.key),
-    onclick: () => { state.category = state.category === choice.key ? "all" : choice.key; renderDashboard.paint(); },
+    onclick: () => {
+      const searched = renderDashboard.endSearch();
+      state.category = !searched && state.category === choice.key ? "all" : choice.key;
+      renderDashboard.paint();
+    },
   }, choice.label, h("span", { class: "chip-count" }, String(ofKind("prep").filter(choice.match).length))));
 }
 
@@ -380,7 +394,11 @@ function tile(item) {
   return h("button", {
     class: `tile ${item.key === "review" ? "review" : ""}`,
     "aria-pressed": String(state.filter === item.key),
-    onclick: () => { state.filter = state.filter === item.key ? "all" : item.key; renderDashboard.paint(); },
+    onclick: () => {
+      const searched = renderDashboard.endSearch();
+      state.filter = !searched && state.filter === item.key ? "all" : item.key;
+      renderDashboard.paint();
+    },
   },
   h("span", { class: "tile-icon" }, icon(item.icon)),
   h("span", {},
@@ -394,13 +412,51 @@ function currentChoice() {
 }
 
 function visibleRecipes() {
-  const { match } = currentChoice();
-  const query = state.query.trim().toLowerCase();
-  return ofKind(state.kind).filter((recipe) => match(recipe)
-    && `${recipe.menu_name || ""} ${recipe.channel || ""} ${(recipe.aliases || []).join(" ")}`.toLowerCase().includes(query));
+  return ofKind(state.kind).filter(currentChoice().match);
+}
+
+// Search ignores the switch, tiles and chips, because an ingredient such as 양파 sits in menus and preps alike.
+function searchKey() {
+  return nameKey(state.query);
+}
+
+// [] when the name, channel or another name matches, the matching ingredient names when only they do, else null.
+function searchHit(recipe, key) {
+  if ([recipe.menu_name, recipe.channel, ...(recipe.aliases || [])].some((name) => nameKey(name).includes(key))) return [];
+  const found = (recipe.ingredient_names || []).filter((name) => nameKey(name).includes(key));
+  return found.length ? found : null;
+}
+
+function cardFor(recipe, found = []) {
+  return isPrep(recipe) ? prepCard(recipe, found) : card(recipe, found);
+}
+
+function searchSections(key) {
+  const kinds = state.kind === "prep" ? ["prep", "menu"] : ["menu", "prep"];
+  const sections = kinds.map((kind) => {
+    const hits = ofKind(kind).map((recipe) => [recipe, searchHit(recipe, key)]).filter(([, found]) => found);
+    return hits.length
+      ? h("section", { class: "search-section" },
+        h("div", { class: "section-head" }, h("h2", {}, `${KIND_NAMES[kind]} 검색 결과`),
+          h("span", { class: "muted" }, `${hits.length}개`)),
+        h("div", { class: "cards" }, hits.map(([recipe, found]) => cardFor(recipe, found))))
+      : null;
+  }).filter(Boolean);
+  if (sections.length) return sections;
+  return [
+    h("div", { class: "section-head" }, h("h2", {}, "검색 결과"), h("span", { class: "muted" }, "0개")),
+    h("p", { class: "no-result" }, `'${state.query.trim()}'에 맞는 메뉴명, 채널, 재료명이 없습니다.`),
+  ];
+}
+
+function matchLine(found) {
+  const names = found.join(", ");
+  return found.length ? h("div", { class: "card-match", title: names }, `재료 · ${names}`) : null;
 }
 
 function recipeSection() {
+  const key = searchKey();
+  if (key) return searchSections(key);
   const recipes = visibleRecipes();
   const choice = currentChoice();
   const empty = !ofKind(state.kind).length && state.kind === "prep"
@@ -410,7 +466,7 @@ function recipeSection() {
     h("div", { class: "section-head" }, h("h2", {}, choice.key === "all" ? `내 ${KIND_NAMES[state.kind]}` : choice.label),
       h("span", { class: "muted" }, `${recipes.length}개`)),
     recipes.length
-      ? h("div", { class: "cards" }, recipes.map((recipe) => (isPrep(recipe) ? prepCard(recipe) : card(recipe))))
+      ? h("div", { class: "cards" }, recipes.map((recipe) => cardFor(recipe)))
       : h("p", { class: "no-result" }, empty),
   ];
 }
@@ -441,7 +497,7 @@ function timeAgo(text) {
   return text.slice(0, 10);
 }
 
-function card(recipe) {
+function card(recipe, found = []) {
   const art = h("div", { class: "art" }, recipe.photo ? h("img", { src: recipe.photo, alt: "" }) : fromMarkup(POT_ART));
   const isNew = recipe.id === state.highlightId;
   if (isNew) art.append(h("span", { class: "new-tag" }, "방금 추가"));
@@ -450,11 +506,12 @@ function card(recipe) {
     h("div", { class: "card-body" },
       h("div", { class: "card-title" }, recipe.menu_name || "메뉴명 미확인"),
       recipe.channel ? h("div", { class: "card-channel" }, recipe.channel) : null,
+      matchLine(found),
       servingTags(recipe),
       h("div", { class: "card-foot" }, PUBLISHED ? null : statusOf(recipe), h("span", {}, timeAgo(recipe.updated_at)))));
 }
 
-function prepCard(recipe) {
+function prepCard(recipe, found = []) {
   const art = h("div", { class: "art" }, recipe.photo ? h("img", { src: recipe.photo, alt: "" }) : fromMarkup(JAR_ART));
   const isNew = recipe.id === state.highlightId;
   if (isNew) art.append(h("span", { class: "new-tag" }, "방금 추가"));
@@ -463,6 +520,7 @@ function prepCard(recipe) {
     h("div", { class: "card-body" },
       h("div", { class: "card-title" }, recipe.menu_name || "프렙명 미확인"),
       recipe.channel ? h("div", { class: "card-channel" }, recipe.channel) : null,
+      matchLine(found),
       h("div", { class: "tags" }, h("span", { class: `tag ${recipe.category ? "prep" : "loose"}` }, recipe.category || "분류 미지정")),
       h("div", { class: "card-foot" }, PUBLISHED ? null : statusOf(recipe), h("span", {}, timeAgo(recipe.updated_at)))));
 }
