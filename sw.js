@@ -1,9 +1,9 @@
 // Built by publish.py. VERSION is a hash of the site files, so each release replaces the cached shell.
 // Several sites share this address and its caches, so every name here carries this site's prefix.
 const PREFIX = 'cook-recipe-';
-const VERSION = `${PREFIX}60ba37a51804`;
+const VERSION = `${PREFIX}6af97414be9f`;
 const DATA_CACHE = `${PREFIX}data`;
-const SHELL = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "fonts/Pretendard-Bold.woff2"];
+const SHELL = ["./", "index.html", "style.css", "rich-text.js", "app.js", "manifest.webmanifest", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "fonts/Pretendard-Bold.woff2"];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

@@ -994,6 +994,8 @@ function portionHead(slot, portion, readonly, printing) {
     readonly ? null : moveSelect(portion));
 }
 
+// Column widths: 분량 and 보조 at 20%, as in Cafe Note, so units like "2 handfuls" stay whole in a narrow Mac
+// window. 비고 takes the rest and may wrap. On a phone the table is drawn as rows of cards instead.
 function portionTable(slot, readonly, printing) {
   const portion = slot.find();
   const count = portion ? portion.ingredients.length : 0;
@@ -1005,8 +1007,8 @@ function portionTable(slot, readonly, printing) {
     slot.head ? slot.head(portion, readonly) : portionHead(slot, portion, readonly, printing),
     h("table", { class: "ingredients" },
       h("colgroup", {},
-        h("col", { style: "width:27%" }), h("col", { style: "width:17%" }),
-        h("col", { style: "width:19%" }), h("col"), readonly ? null : h("col", { style: "width:30px" })),
+        h("col", { style: "width:27%" }), h("col", { style: "width:20%" }),
+        h("col", { style: "width:20%" }), h("col"), readonly ? null : h("col", { style: "width:30px" })),
       h("thead", {}, h("tr", {},
         ["재료명", "분량(단위)", "보조(단위)", "비고"].map((name) => h("th", {}, name)),
         readonly ? null : h("th", { class: "row-end" }))),
@@ -1313,18 +1315,17 @@ function stepsList(steps) {
     else items.push({ text: step.replace(/^- /, ""), tips: [] });
   }
   return h("ol", { class: "steps" }, items.map(({ text, tips }) => h("li", {},
-    h("p", {}, text),
-    tips.length ? h("ul", {}, tips.map((tip) => h("li", {}, tip))) : null)));
+    h("p", {}, richText(text)),
+    tips.length ? h("ul", {}, tips.map((tip) => h("li", {}, richText(tip)))) : null)));
 }
 
 function stepsArea(readonly) {
   const { recipe } = state;
   if (readonly) return stepsList(recipe.steps);
-  return h("textarea", {
-    class: "writing", value: stepsText(recipe.steps), placeholder: "1. 첫 번째 단계",
-    oninput: (event) => {
-      grow(event.target);
-      recipe.steps = event.target.value.split("\n")
+  return writer({
+    className: "writing", value: stepsText(recipe.steps), placeholder: "1. 첫 번째 단계",
+    onchange: (value) => {
+      recipe.steps = value.split("\n")
         .map((line) => line.trim().replace(/^\d+[.)]\s*/, ""))
         .filter(Boolean);
       changed();
@@ -1334,11 +1335,76 @@ function stepsArea(readonly) {
 
 function memoArea(readonly) {
   const { recipe } = state;
-  if (readonly) return h("div", { class: "memo" }, recipe.memo || "");
-  return h("textarea", {
-    class: "writing", value: recipe.memo || "", placeholder: "메모 입력",
-    oninput: (event) => { grow(event.target); recipe.memo = event.target.value; changed(); },
+  if (readonly) return h("div", { class: "memo" }, richLines(recipe.memo || ""));
+  return writer({
+    className: "writing", value: recipe.memo || "", placeholder: "메모 입력",
+    onchange: (value) => { recipe.memo = value; changed(); },
   });
+}
+
+/* ---------- formatting ----------
+   The 제조방법 and 메모 boxes show their formatting while they are edited; rich-text.js keeps it as short marks
+   in the saved text. Choose words, then [서식]. [기호] puts a sign at the cursor. ⌘B makes the chosen words bold. */
+
+const FORMAT_STYLES = [["bold", "굵게"], ["mark", "형광펜"], ["big", "크게"], ["small", "작게"]];
+const FORMAT_COLORS = [["red", "빨강"], ["yellow", "노랑"], ["blue", "파랑"], ["green", "초록"], ["orange", "주황"], ["purple", "보라"]];
+// In groups: fractions, sums and comparisons, temperature, arrows, marks for notes.
+const FORMAT_SYMBOLS = ["½", "⅓", "⅔", "¼", "¾", "⅛", "×", "÷", "±", "≈", "≤", "≥", "~", "℃", "℉", "°",
+  "→", "↑", "↓", "·", "※", "✓", "★"];
+
+function writer(options) {
+  const editor = richBox(options);
+  const box = editor.element;
+  const needWords = () => toast("서식을 넣을 글자를 먼저 고르세요");
+  const format = (name, range) => {
+    closePop();
+    if (!editor.format(name, range)) needWords();
+  };
+  box.addEventListener("keydown", (event) => {
+    if (event.code !== "KeyB" || !(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || composing(event)) return;
+    event.preventDefault();
+    format("bold");
+  });
+  // mousedown would move the focus off the box and lose the chosen words.
+  const tool = (label, title, onclick) => h("button", {
+    type: "button", class: "format-tool", title, "aria-label": title,
+    onmousedown: (event) => event.preventDefault(), onclick,
+  }, label);
+  const menu = (anchor, ...items) => {
+    if (pop && pop.anchor === anchor) closePop();
+    else openPop(anchor, ...items);
+  };
+  const choice = (name, word, range, className) => h("button", {
+    type: "button", class: `pop-item ${className}`, onclick: () => format(name, range),
+  }, word);
+  const formatButton = tool("서식 ▾", "서식: 글자를 고른 뒤 누르세요", () => {
+    const range = editor.range();
+    if (!range || range[0] === range[1]) {
+      closePop();
+      needWords();
+      return;
+    }
+    menu(formatButton,
+      h("p", { class: "pop-title" }, "서식"),
+      h("div", { class: "format-styles" }, FORMAT_STYLES.map(([name, word]) => choice(name, word, range, `format-${name}`))),
+      h("p", { class: "pop-group" }, "글자색"),
+      h("div", { class: "format-colors" }, FORMAT_COLORS.map(([name, word]) => choice(name, word, range, `tx-${name}`))),
+      choice("clear", "서식 지우기", range, "format-clear"));
+  });
+  const symbolButton = tool("기호 ▾", "기호 넣기", () => {
+    const range = editor.range() || undefined;
+    menu(symbolButton,
+      h("p", { class: "pop-title" }, "기호 넣기"),
+      h("div", { class: "format-symbols" }, FORMAT_SYMBOLS.map((symbol) => h("button", {
+        type: "button", class: "pop-item",
+        onclick: () => {
+          closePop();
+          editor.insert(symbol, range);
+        },
+      }, symbol))));
+  });
+  return h("div", { class: "writer" },
+    h("div", { class: "format-bar", role: "toolbar", "aria-label": "서식" }, formatButton, symbolButton), box);
 }
 
 function freeFormPanel() {

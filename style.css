@@ -422,3 +422,33 @@ html[data-mode="published"] #app {
   #print-root .steps > li::before { width: 21px; height: 21px; font-size: 11px; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+
+/* ---------- formatting in 제조방법 and 메모 (marks: rich-text.js) ---------- */
+mark { padding: 0 1px; border-radius: 2px; background: #d4f5a0; color: inherit; }
+.tx-red { color: #c62828; }
+.tx-yellow { color: #a67c00; }
+.tx-blue { color: #1d5fb8; }
+.tx-green { color: #2e7d32; }
+.tx-orange { color: #e8590c; }
+.tx-purple { color: #7b3fb5; }
+.tx-big { font-size: 1.25em; }
+.tx-small { font-size: .85em; }
+.rich-box { position: relative; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; outline: none; cursor: text; }
+.rich-box.is-empty::before { content: attr(data-placeholder); position: absolute; color: #9b9187; pointer-events: none; }
+.format-tool { font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.format-styles, .format-colors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.format-styles { grid-template-columns: repeat(4, 1fr); }
+.format-mark { background: #d4f5a0; }
+.format-styles .pop-item, .format-colors .pop-item { align-items: center; font-weight: 750; }
+.format-big { font-size: 1.2em; }
+.format-small { font-size: .85em; }
+.format-clear { margin-top: 4px; border-top: 1px solid var(--border); border-radius: 0 0 8px 8px; }
+.format-symbols { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.format-symbols .pop-item { align-items: center; padding: 6px 0; font-size: 16px; }
+.rich-box.writing { display: block; min-height: 96px; padding: 10px 12px; border-radius: 10px; background: var(--canvas); line-height: 1.7; }
+.rich-box.writing:focus { background: var(--olive-tint); }
+.rich-box.is-empty::before { top: 10px; left: 12px; }
+.format-bar { display: flex; gap: 4px; margin-bottom: 6px; }
+.format-tool { padding: 3px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.format-tool:hover { border-color: var(--olive-3); color: var(--olive); }
